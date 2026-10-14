@@ -1,0 +1,273 @@
+<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><title>Pipeline RISC-V con excepciones</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>
+:root{--bg:#f4f6f9;--fg:#1d2330;--card:#fff;--bd:#d5d9e0;--ac:#3b5bdb;--mut:#667085;--ok:#d3f9d8;--okf:#1b6b2d;--st:#fff3bf;--stf:#8a5a00;--fl:#ffe0e0;--flf:#a31515;--ex:#eadcff;--exf:#5b21b6;--wn:#ffe8cc;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media(prefers-color-scheme:dark){:root:not([data-theme=light]){--bg:#14171d;--fg:#e6e9ef;--card:#1e232c;--bd:#363d4a;--ac:#8fa8ff;--mut:#9aa3b2;--ok:#16391f;--okf:#8ce99a;--st:#4a3a00;--stf:#ffd966;--fl:#4a1c1c;--flf:#ff9b9b;--ex:#3a2763;--exf:#d0b8ff;--wn:#4d3112}}
+:root[data-theme=dark]{--bg:#14171d;--fg:#e6e9ef;--card:#1e232c;--bd:#363d4a;--ac:#8fa8ff;--mut:#9aa3b2;--ok:#16391f;--okf:#8ce99a;--st:#4a3a00;--stf:#ffd966;--fl:#4a1c1c;--flf:#ff9b9b;--ex:#3a2763;--exf:#d0b8ff;--wn:#4d3112}
+*{box-sizing:border-box}html,body{height:auto}body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.4 system-ui,sans-serif;padding:12px;max-width:1200px;margin:auto}
+h1{font-size:18px;margin:0}h3{margin:0 0 8px;font-size:14px}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:10px;padding:12px;margin-bottom:10px}
+header{display:flex;flex-wrap:wrap;gap:8px;justify-content:space-between;align-items:center;margin-bottom:10px}
+button,input,textarea{font:inherit;color:var(--fg);background:var(--card);border:1px solid var(--bd);border-radius:6px;padding:5px 9px}
+button{cursor:pointer}button:hover{border-color:var(--ac)}button.p{background:var(--ac);color:#fff;border-color:var(--ac)}
+textarea{width:100%;font-family:ui-monospace,monospace;resize:vertical}
+.row{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:6px 0}
+.mut{color:var(--mut);font-size:12px}
+#pipe{display:flex;gap:6px;align-items:stretch}
+.st{flex:1;min-width:0;border:2px solid var(--bd);border-radius:8px;padding:6px;min-height:130px;background:var(--bg)}
+.st h4{margin:0 0 4px;color:var(--ac);font-size:13px}
+.ins{font-family:ui-monospace,monospace;font-size:12px;word-break:break-word}
+.ins.dead{text-decoration:line-through;opacity:.6}
+.bub{color:var(--mut);font-style:italic;font-size:12px}
+.b{display:block;font-size:11px;border-radius:4px;padding:2px 5px;margin-top:3px}
+.b.f{background:var(--ok);color:var(--okf)}.b.s{background:var(--st);color:var(--stf)}.b.x{background:var(--fl);color:var(--flf)}.b.e{background:var(--ex);color:var(--exf)}.b.w{background:var(--wn)}.b.i{background:var(--bg);color:var(--mut)}
+.ar{align-self:center;color:var(--mut)}
+.info span{margin-right:14px}
+.sc{overflow-x:auto}table{border-collapse:collapse;font-size:12px}
+td,th{border:1px solid var(--bd);padding:2px 6px;text-align:center;white-space:nowrap}
+td.l{text-align:left;font-family:ui-monospace,monospace}
+td.stl{background:var(--st);color:var(--stf)}td.flush{background:var(--fl);color:var(--flf)}td.exc{background:var(--ex);color:var(--exf);font-weight:700}td.on{background:var(--ok);color:var(--okf)}
+th.cur{background:var(--ac);color:#fff}
+#regs{display:grid;grid-template-columns:repeat(auto-fill,minmax(78px,1fr));gap:3px;font-family:ui-monospace,monospace;font-size:12px}
+#regs div{border:1px solid var(--bd);border-radius:4px;padding:2px 4px}#regs .c{background:var(--ok);color:var(--okf)}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:10px}@media(max-width:800px){.two{grid-template-columns:1fr}#pipe{flex-direction:column}.ar{transform:rotate(90deg)}}
+#log{max-height:180px;overflow:auto;font-family:ui-monospace,monospace;font-size:12px}
+#msg{color:var(--flf);font-size:12px;min-height:16px}
+#dp .z{fill:none;stroke:var(--bd);stroke-dasharray:2 3}#dp .z.on{stroke:var(--ac);stroke-dasharray:none}
+#dp text{fill:var(--fg);font:10px system-ui}#dp .tc{text-anchor:middle}#dp .h{font-weight:700;font-size:11px}#dp .s9{font-size:9px}
+#dp .bx{fill:var(--card);stroke:var(--mut);stroke-width:1.5}#dp .bx.a{stroke:var(--ac);stroke-width:3}#dp .bx.s{fill:var(--st)}#dp .bx.wn{fill:var(--wn)}#dp .bx.fg{fill:var(--ok)}#dp .bx.e{fill:var(--ex)}
+#dp .bar{fill:var(--bd)}#dp .bar.st{fill:var(--stf)}#dp .bar.fl{fill:var(--flf)}
+#dp .wr{fill:none;stroke:var(--bd);stroke-width:2}#dp .wr.on{stroke:var(--ac);stroke-dasharray:6 4;animation:dd .7s linear infinite}
+#dp .wr.f.on{stroke:var(--okf);stroke-width:4}#dp .wr.e.on{stroke:var(--exf);stroke-width:3.5}#dp .wr.br.on{stroke:var(--stf);stroke-width:3.5}
+@keyframes dd{to{stroke-dashoffset:-20}}
+</style></head><body>
+<header><h1>Pipeline RISC-V de 5 etapas · con excepciones</h1>
+<div class="row"><span id="auth"><button id="login">Entrar como admin</button></span><button id="logout" hidden>Salir de admin</button></div></header>
+
+<section class="card" id="admin" hidden>
+<h3>Panel de administrador (profesor)</h3>
+<textarea id="src" rows="9" spellcheck="false"></textarea>
+<div class="row"><span class="mut" id="cnt"></span><button class="p" id="load">Cargar programa</button><button id="ex1">Ejemplo diapositiva (excepción en add)</button><button id="ex2">Ejemplo riesgos + branch</button></div>
+<div class="mut">Máx. 20 líneas, PC inicia en 0x40. Soportadas: add, sub, and, or/orr, addi, ld, sd, beq, bne (offset en bytes), nop, sret. Añade <b>!</b> al final de una línea para que esa instrucción lance una excepción en EX (ej: <code>add x1,x2,x1 !</code>). Cualquier otra cosa se carga igual y provoca <b>instrucción ilegal</b> en ID. Regs iniciales: xN = N.</div>
+<div id="msg"></div>
+<div class="row"><label><input type="checkbox" id="fw" checked> Forwarding</label><label><input type="checkbox" id="det" checked> Detección de riesgos (stalls)</label></div>
+<div class="row"><input id="inj" placeholder="ej: add x5,x1,x2" size="22"><button id="bInj">Inyectar en IF (próximo ciclo)</button>
+<button id="fIF">Flush IF</button><button id="fID">Flush ID</button><button id="fEX">Flush EX</button><button id="bBub">Insertar burbuja</button><button id="bExc">⚡ Excepción en EX</button></div>
+</section>
+
+<section class="card"><div class="row"><button class="p" id="step">Paso ▶</button><button id="play">Reproducir</button><button id="rst">Reiniciar</button>
+<label>Velocidad <input type="range" id="spd" min="150" max="1500" value="700"></label></div>
+<div class="info" id="info"></div></section>
+
+<section class="card"><div id="pipe"></div>
+<div class="mut" style="margin-top:6px">Verde = forwarding · Amarillo = stall · Rojo = flush · Morado = excepción · Naranja = riesgo sin resolver</div></section>
+
+<section class='card'><h3>Datapath (se anima con cada ciclo)</h3><div class='sc'><svg id='dp' viewBox='0 0 1000 400' style='width:100%;min-width:780px;display:block'>
+<rect id='zIF' class='z' x='8' y='30' width='180' height='345' rx='8'></rect><rect id='zID' class='z' x='206' y='30' width='200' height='345' rx='8'></rect><rect id='zEX' class='z' x='428' y='30' width='208' height='345' rx='8'></rect><rect id='zMEM' class='z' x='658' y='30' width='148' height='345' rx='8'></rect><rect id='zWB' class='z' x='828' y='30' width='164' height='345' rx='8'></rect>
+<text id='tIF' class='h' x='14' y='22'></text><text id='tID' class='h' x='212' y='22'></text><text id='tEX' class='h' x='434' y='22'></text><text id='tMEM' class='h' x='664' y='22'></text><text id='tWB' class='h' x='834' y='22'></text>
+<rect id='bIFID' class='bar' x='190' y='60' width='14' height='250' rx='3'></rect><rect id='bIDEX' class='bar' x='409' y='60' width='14' height='250' rx='3'></rect><rect id='bEXMEM' class='bar' x='638' y='60' width='14' height='250' rx='3'></rect><rect id='bMEMWB' class='bar' x='808' y='60' width='14' height='250' rx='3'></rect>
+<text class='tc s9' x='197' y='54'>IF/ID</text><text class='tc s9' x='416' y='54'>ID/EX</text><text class='tc s9' x='645' y='54'>EX/MEM</text><text class='tc s9' x='815' y='54'>MEM/WB</text>
+<ellipse id='mPC' class='bx' cx='30' cy='210' rx='10' ry='22'></ellipse><rect id='pc' class='bx' x='50' y='190' width='36' height='40' rx='4'></rect><text class='tc' x='68' y='214'>PC</text><text id='tPC' class='tc s9' x='68' y='246'></text>
+<rect class='bx' x='52' y='118' width='34' height='20' rx='4'></rect><text class='tc' x='69' y='132'>+4</text>
+<rect id='im' class='bx' x='100' y='160' width='70' height='100' rx='4'></rect><text class='tc' x='135' y='206'>Instruction</text><text class='tc' x='135' y='219'>memory</text>
+<rect id='hz' class='bx' x='228' y='38' width='110' height='26' rx='13'></rect><text class='tc' x='283' y='55'>Hazard detection</text>
+<rect id='ctl' class='bx' x='228' y='80' width='80' height='28' rx='14'></rect><text class='tc' x='268' y='98'>Control</text>
+<rect id='reg' class='bx' x='250' y='160' width='90' height='100' rx='4'></rect><text class='tc' x='295' y='214'>Registers</text>
+<rect class='bx' x='250' y='280' width='90' height='30' rx='14'></rect><text class='tc' x='295' y='299'>Imm Gen</text>
+<circle id='cmp' class='bx' cx='385' cy='200' r='13'></circle><text class='tc' x='385' y='204'>=</text>
+<ellipse class='bx' cx='505' cy='185' rx='9' ry='20'></ellipse><ellipse class='bx' cx='505' cy='235' rx='9' ry='20'></ellipse>
+<polygon id='alu' class='bx' points='540,165 600,185 600,235 540,255 540,225 552,210 540,195'></polygon><text class='tc' x='574' y='214'>ALU</text>
+<rect id='fwu' class='bx' x='520' y='345' width='110' height='24' rx='12'></rect><text class='tc' x='575' y='361'>Forwarding unit</text>
+<rect id='sepc' class='bx' x='450' y='70' width='150' height='36' rx='4'></rect><text id='tSEP' x='458' y='85'></text><text id='tCAU' x='458' y='99'></text>
+<rect id='dm' class='bx' x='690' y='165' width='90' height='100' rx='4'></rect><text class='tc' x='735' y='212'>Data</text><text class='tc' x='735' y='225'>memory</text>
+<ellipse id='mwb' class='bx' cx='870' cy='210' rx='9' ry='22'></ellipse>
+<rect class='bx' x='14' y='330' width='100' height='24' rx='12'></rect><text class='tc s9' x='64' y='346'>handler 0x1C090000</text>
+<path class='wr wIF' d='M40 210H50M86 210H100M170 210H190M69 138V190'></path>
+<path class='wr wID' d='M204 215H250M340 200H372M340 215H409M204 295H250M340 295H409M204 94H228M308 94H409'></path>
+<path class='wr wEX' d='M423 185H496M423 235H496M514 185H540M514 235H540M600 210H638'></path>
+<path class='wr wMEM' d='M652 215H690M780 215H808'></path>
+<path class='wr wWB' d='M822 210H861M879 210H920'></path>
+<path id='fM' class='wr f' d='M645 310V322H488V235H496'></path><path id='fW' class='wr f' d='M815 310V336H480V185H496'></path>
+<path id='pBr' class='wr br' d='M385 187V140H30V188'></path><path id='pHand' class='wr e' d='M64 330V252H30V232'></path><path id='pExc' class='wr e' d='M525 106V165'></path>
+<text id='tALU' x='540' y='275'></text><text id='tMEM' x='664' y='290'></text><text id='tWBv' x='834' y='260'></text><text id='tIDv' x='212' y='340'></text>
+<text class='s9' x='8' y='392'>Barra roja = flush · barra amarilla = stall · cable verde = forwarding · cable morado = excepción · cable amarillo = salto/sret</text>
+</svg></div></section>
+<section class="card"><h3>Diagrama de ciclos</h3><div class="sc" id="gantt"></div></section>
+<div class="two"><section class="card"><h3>Registros</h3><div id="regs"></div><h3 style="margin-top:10px">Memoria escrita</h3><div id="mem" class="ins"></div></section>
+<section class="card"><h3>Registro de eventos</h3><div id="log"></div></section></div>
+
+<script>
+const ADMIN='admin',HAND=0x1C090000,ST=['IF','ID','EX','MEM','WB'];
+let P={},prog=[],S,pend,cyc,PC,regs,mem,all,uid,LG,B,chg,fl,inj,bub,done,sepc,scause,force,stalls,flushes,timer=null,FW=true,DET=true;
+const $=id=>document.getElementById(id),hx=n=>'0x'+n.toString(16);
+const R=s=>{const m=/^x(\d+)$/i.exec(s||'');return m&&+m[1]<32?+m[1]:null};
+const N_=s=>/^-?(0x[0-9a-f]+|\d+)$/i.test(s||'')?Number(s):NaN;
+function parse(line){
+ let t=line.replace(/#.*/,'').trim();if(!t)return null;
+ const exc=/!\s*$/.test(t);t=t.replace(/!\s*$/,'').trim();
+ const p=t.replace(/[,()]/g,' ').trim().split(/\s+/);let op=p[0].toLowerCase();if(op=='or')op='orr';
+ const o={op,text:t+(exc?' !':''),exc,rd:0,rs1:0,rs2:0,imm:0};let ok=false;
+ if(['add','sub','and','orr'].includes(op)&&p.length==4){o.rd=R(p[1]);o.rs1=R(p[2]);o.rs2=R(p[3]);ok=[o.rd,o.rs1,o.rs2].every(v=>v!==null)}
+ else if(op=='addi'&&p.length==4){o.rd=R(p[1]);o.rs1=R(p[2]);o.imm=N_(p[3]);ok=o.rd!==null&&o.rs1!==null&&!isNaN(o.imm)}
+ else if(op=='ld'&&p.length==4){o.rd=R(p[1]);o.imm=N_(p[2]);o.rs1=R(p[3]);ok=o.rd!==null&&o.rs1!==null&&!isNaN(o.imm)}
+ else if(op=='sd'&&p.length==4){o.rs2=R(p[1]);o.imm=N_(p[2]);o.rs1=R(p[3]);ok=o.rs2!==null&&o.rs1!==null&&!isNaN(o.imm)}
+ else if((op=='beq'||op=='bne')&&p.length==4){o.rs1=R(p[1]);o.rs2=R(p[2]);o.imm=N_(p[3]);ok=o.rs1!==null&&o.rs2!==null&&!isNaN(o.imm)}
+ else if((op=='nop'||op=='sret')&&p.length==1)ok=true;
+ o.ill=!ok;['rd','rs1','rs2','imm'].forEach(k=>{if(!o[k])o[k]=0});return o}
+const uses=i=>i.ill?[]:['add','sub','and','orr','sd','beq','bne'].includes(i.op)?[i.rs1,i.rs2]:['addi','ld'].includes(i.op)?[i.rs1]:[];
+const wr=i=>!i.ill&&['add','sub','and','orr','addi','ld'].includes(i.op)&&i.rd!=0;
+const val=i=>i.op=='ld'?i.mem:i.res;
+const isBr=i=>i.op=='beq'||i.op=='bne';
+function mk(t,pc){const i={...t,id:++uid,cells:{},a:0,b:0,res:0,mem:0};if(pc!==undefined){i.pc=pc;i.inj=1}all.push(i);return i}
+function fetch(){
+ if(inj.length)return mk(inj.shift(),PC);
+ if(bub){bub=false;return null}
+ const t=P[PC];if(!t)return null;PC+=4;return mk(t)}
+const cell=(i,c,t,cls)=>{i.cells[c]={t,cls:cls||''}};
+const bd=(k,t,c)=>B[k].push([t,c]);
+const lg=m=>LG.unshift('[ciclo '+cyc+'] '+m);
+function load(){
+ const lines=$('src').value.split('\n').map(parse).filter(Boolean);
+ if(lines.length>20){$('msg').textContent='Máximo 20 instrucciones (tienes '+lines.length+'). Se cargaron las primeras 20.'}else $('msg').textContent='';
+ prog=lines.slice(0,20);reset()}
+function reset(){
+ stop();P={};prog.forEach((t,i)=>{t.pc=0x40+4*i;P[t.pc]=t});
+ ['sd x26,1000(x10)','sd x27,1008(x10)','sret'].forEach((s,i)=>{const t=parse(s);t.pc=HAND+4*i;t.h=1;P[t.pc]=t});
+ regs=Array.from({length:32},(_,i)=>i);mem={};all=[];uid=0;LG=[];fl={};inj=[];bub=false;done=false;sepc=null;scause='—';force=false;stalls=0;flushes=0;cyc=0;PC=0x40;
+ S={IF:null,ID:null,EX:null,MEM:null,WB:null};B={IF:[],ID:[],EX:[],MEM:[],WB:[]};chg=new Set();
+ pend={IF:fetch(),ID:null,EX:null,MEM:null,WB:null};render()}
+function hazard(d,L){
+ const br=isBr(d),x=L.EX,y=L.MEM;
+ for(const r of uses(d)){if(!r)continue;
+  if(x&&wr(x)&&x.rd==r&&(!FW||x.op=='ld'||br))return 'x'+r+' aún no disponible (productor en EX: '+x.text+')';
+  if(y&&wr(y)&&y.rd==r&&(!FW||(br&&y.op=='ld')))return 'x'+r+' aún no disponible (productor en MEM: '+y.text+')'}
+ return null}
+function fwd(L,r,def){
+ if(!FW||!r)return[def,null];
+ const m=L.MEM,w=L.WB;
+ if(m&&wr(m)&&m.rd==r&&m.op!='ld')return[m.res,'EX/MEM'];
+ if(w&&wr(w)&&w.rd==r)return[val(w),'MEM/WB'];
+ return[def,null]}
+function compute(){
+ const L={...S},N={IF:null,ID:null,EX:null,MEM:null,WB:null},c=cyc;
+ B={IF:[],ID:[],EX:[],MEM:[],WB:[]};chg=new Set();
+ ST.forEach(k=>L[k]&&cell(L[k],c,k));
+ for(const k of ['IF','ID','EX'])if(fl[k]){
+  if(L[k]){bd(k,'FLUSH.'+k+' (admin): instrucción descartada','x');cell(L[k],c,'X','flush');lg('Flush manual de '+k+': '+L[k].text);flushes++}
+  else lg('Flush de '+k+' sin efecto (ya era burbuja)');
+  L[k]=null;fl[k]=false}
+ // WB
+ const w=L.WB;if(w&&wr(w)){regs[w.rd]=val(w);chg.add(w.rd);bd('WB','x'+w.rd+' ← '+val(w),'i')}
+ // MEM
+ const m=L.MEM;if(m){
+  if(m.op=='ld'){m.mem=mem[m.res]??0;bd('MEM','lee mem['+m.res+'] = '+m.mem,'i')}
+  if(m.op=='sd'){mem[m.res]=m.b;bd('MEM','escribe mem['+m.res+'] = '+m.b,'i')}
+  N.WB=m}
+ // EX
+ const e=L.EX;let exc=null;
+ if(e){
+  const[a,fa]=fwd(L,e.rs1,e.a),[b,fb]=fwd(L,e.rs2,e.b);
+  if(fa)bd('EX','Forwarding '+fa+' → ALU (x'+e.rs1+')','f');
+  if(fb)bd('EX','Forwarding '+fb+' → ALU (x'+e.rs2+')','f');
+  if(fa||fb){cell(e,c,'EX','on');lg('Forwarding en '+e.text)}
+  e.b=b;const o=e.op;
+  e.res=o=='add'?a+b:o=='sub'?a-b:o=='and'?a&b:o=='orr'?a|b:(o=='addi'||o=='ld'||o=='sd')?a+e.imm:0;
+  if(e.exc||force)exc=force?'Excepción forzada (admin)':(['add','sub','addi'].includes(o)?'Overflow aritmético':'Excepción en '+o);
+  else if(!e.ill&&o!='nop'&&!isBr(e)&&o!='sret')bd('EX','ALU = '+e.res,'i')}
+ else if(force)lg('Excepción forzada sin efecto: no había instrucción en EX');
+ force=false;
+ if(exc){
+  sepc=e.pc;scause=exc;cell(e,c,'⚡EX','exc');
+  bd('EX','⚡ EXCEPCIÓN: '+exc+' · SEPC='+hx(sepc)+' · EX.Flush','e');
+  if(L.ID){cell(L.ID,c+1,'X','flush');bd('ID','ID.Flush: instrucción descartada','x');flushes++}
+  if(L.IF){cell(L.IF,c+1,'X','flush');bd('IF','IF.Flush: instrucción descartada','x');flushes++}
+  flushes++;PC=HAND;N.IF=fetch();
+  lg('⚡ '+exc+' en '+e.text+' (pc '+hx(e.pc)+'). Flush de IF, ID y EX. PC ← '+hx(HAND))
+ }else{
+  N.MEM=e||null;const d=L.ID;let stall=false,sq=false,tgt=0,dexc=false;
+  if(d){
+   if(d.ill){
+    dexc=true;sepc=d.pc;scause='Instrucción ilegal';cell(d,c,'⚡ID','exc');
+    bd('ID','⚡ INSTRUCCIÓN ILEGAL: "'+d.text+'" · SEPC='+hx(sepc),'e');
+    if(L.IF){cell(L.IF,c+1,'X','flush');bd('IF','IF.Flush: descartada','x');flushes++}
+    PC=HAND;N.IF=fetch();lg('⚡ Instrucción ilegal "'+d.text+'". PC ← '+hx(HAND))}
+   else{
+    const hz=hazard(d,L);
+    if(hz&&DET)stall=true;
+    else{
+     if(hz){bd('ID','⚠ RIESGO sin resolver: '+hz+'. Lee valor viejo','w');cell(d,c,'ID','flush');lg('⚠ Riesgo de datos sin resolver en '+d.text)}
+     let a=regs[d.rs1],b=regs[d.rs2];
+     if(isBr(d)){
+      if(FW&&L.MEM&&wr(L.MEM)&&L.MEM.op!='ld'){if(L.MEM.rd==d.rs1&&d.rs1)a=L.MEM.res;if(L.MEM.rd==d.rs2&&d.rs2)b=L.MEM.res}
+      const t=d.op=='beq'?a==b:a!=b;
+      bd('ID','Comparador: x'+d.rs1+'('+a+') '+(d.op=='beq'?'==':'!=')+' x'+d.rs2+'('+b+') → '+(t?'TOMADO':'no tomado'),'i');
+      if(t){sq=true;tgt=d.pc+d.imm}}
+     else if(d.op=='sret'){sq=true;tgt=sepc===null?d.pc+4:sepc+4;bd('ID','sret: vuelve a SEPC+4 = '+hx(tgt),'e')}
+     d.a=a;d.b=b}}}
+  if(dexc){N.ID=null;N.EX=null}
+  else if(stall){
+   const hz=hazard(d,L);stalls++;N.ID=d;N.IF=L.IF;N.EX=null;
+   cell(d,c,'ID','stl');if(L.IF)cell(L.IF,c,'IF','stl');
+   bd('ID','STALL: '+hz,'s');bd('EX','burbuja (nop) insertada','s');if(L.IF)bd('IF','retenida (PC y IF/ID congelados)','s');
+   lg('STALL en '+d.text+': '+hz)}
+  else{
+   N.EX=d||null;
+   if(sq){
+    if(L.IF){cell(L.IF,c+1,'X','flush');bd('IF','IF.Flush: instrucción descartada','x');flushes++}
+    PC=tgt;N.ID=null;bd('ID','PC ← '+hx(tgt),'i');lg('Salto en '+d.text+': PC ← '+hx(tgt)+' (flush de IF)')}
+   else N.ID=L.IF;
+   N.IF=fetch()}}
+ pend=N;
+ if(!ST.some(k=>N[k])&&!P[PC]&&!inj.length){done=true;lg('Programa terminado.')}
+ if(c>=300){done=true;lg('Límite de 300 ciclos alcanzado.')}}
+function step(){if(done){stop();return}if(pend){S=pend;pend=null;cyc++}compute();render();if(done)stop()}
+function stop(){if(timer){clearInterval(timer);timer=null}$('play').textContent='Reproducir'}
+function play(){if(timer){stop();return}$('play').textContent='Pausar';timer=setInterval(step,+$('spd').value)}
+function render(){
+ $('pipe').innerHTML=ST.map((k,i)=>{const x=S[k];const dead=B[k].some(b=>b[1]=='x'&&/descart|FLUSH/.test(b[0]));
+  return(i?'<span class="ar">➜</span>':'')+'<div class="st"><h4>'+k+'</h4>'+(x?'<div class="ins'+(dead?' dead':'')+'">'+(x.pc!==undefined?hx(x.pc)+': ':'')+esc(x.text)+(x.inj?' (inyectada)':'')+(x.h?' (handler)':'')+'</div>':'<div class="bub">'+(cyc?'burbuja':'—')+'</div>')+B[k].map(b=>'<span class="b '+b[1]+'">'+esc(b[0])+'</span>').join('')+'</div>'}).join('');
+ $('info').innerHTML='<span><b>Ciclo:</b> '+cyc+'</span><span><b>PC:</b> '+hx(PC)+'</span><span><b>SEPC:</b> '+(sepc===null?'—':hx(sepc))+'</span><span><b>SCAUSE:</b> '+esc(scause)+'</span><span><b>Stalls:</b> '+stalls+'</span><span><b>Flushes:</b> '+flushes+'</span>'+(done?'<b>· FIN</b>':'');
+ const nc=Math.max(cyc,10);
+ let h='<table><tr><th>Instrucción</th>'+Array.from({length:nc},(_,i)=>'<th class="'+(i+1==cyc?'cur':'')+'">'+(i+1)+'</th>').join('')+'</tr>';
+ all.forEach(i=>{h+='<tr><td class="l">'+(i.pc!==undefined?hx(i.pc)+' ':'')+esc(i.text)+'</td>';
+  for(let c=1;c<=nc;c++){const x=i.cells[c];h+=x&&c<=cyc+(x.t=='X'?1:0)?'<td class="'+x.cls+'">'+x.t+'</td>':'<td></td>'}h+='</tr>'});
+ $('gantt').innerHTML=h+'</table>';
+ $('regs').innerHTML=regs.map((v,i)=>'<div class="'+(chg.has(i)?'c':'')+'">x'+i+': '+v+'</div>').join('');
+ $('mem').textContent=Object.keys(mem).length?Object.entries(mem).map(([a,v])=>'mem['+a+'] = '+v).join(' · '):'(vacía)';
+ $('log').innerHTML=LG.map(l=>'<div>'+esc(l)+'</div>').join('');draw()}
+const esc=s=>String(s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+function draw(){
+ const q=(s,c,on)=>document.querySelectorAll(s).forEach(e=>e.classList.toggle(c,!!on));
+ const tx=(k,s)=>B[k].some(b=>b[0].includes(s)),cl=(k,c)=>B[k].some(b=>b[1]==c);
+ const tr=(s,n)=>s.length>n?s.slice(0,n-1)+'…':s;
+ const f=(k,c)=>{const b=B[k].find(b=>c.includes(b[1]));return b?b[0]:''};
+ ST.forEach(k=>{q('.w'+k,'on',S[k]);q('#z'+k,'on',S[k]);$('t'+k).textContent=tr(k+': '+(S[k]?S[k].text:cyc?'burbuja':'—'),22)});
+ const fM=tx('EX','EX/MEM'),fW=tx('EX','MEM/WB'),stall=cl('ID','s'),warn=cl('ID','w'),ill=tx('ID','ILEGAL'),
+ exc=(cl('EX','e')&&tx('EX','⚡'))||ill,flIF=cl('IF','x'),flID=cl('ID','x')||ill,flEX=tx('EX','EX.Flush')||tx('EX','FLUSH.EX'),
+ br=tx('ID','TOMADO')||tx('ID','sret:');
+ q('#fM','on',fM);q('#fW','on',fW);q('#fwu','fg',fM||fW);
+ q('#bIFID','st',stall);q('#bIFID','fl',flIF);q('#bIDEX','st',stall);q('#bIDEX','fl',flID);q('#bEXMEM','fl',flEX);
+ q('#pc','s',stall);q('#hz','s',stall);q('#hz','wn',warn&&!stall);
+ q('#pBr','on',br);q('#pHand','on',exc);q('#pExc','on',exc);q('#sepc','e',exc);q('#mPC','a',br||exc);
+ q('#cmp','fg',tx('ID','Comparador'));
+ q('#im','a',S.IF);q('#ctl','a',S.ID);q('#reg','a',S.ID);q('#alu','a',S.EX);q('#dm','a',S.MEM);q('#mwb','a',S.WB);
+ $('tPC').textContent=hx(PC);
+ $('tSEP').textContent='SEPC='+(sepc===null?'—':hx(sepc));$('tCAU').textContent=tr('SCAUSE='+scause,28);
+ $('tALU').textContent=f('EX','i');$('tMEM').textContent=tr(f('MEM','i'),26);$('tWBv').textContent=f('WB','i');$('tIDv').textContent=tr(f('ID','ie'),40)}
+const EX1='sub x11,x2,x4\nand x12,x2,x5\norr x13,x2,x6\nadd x1,x2,x1 !\nsub x15,x6,x7\nld x16,100(x7)',
+EX2='ld x1,0(x2)\nadd x3,x1,x4\nsub x5,x3,x1\nsd x5,8(x2)\nbeq x5,x5,8\naddi x6,x0,99\naddi x7,x0,7\nfoo x1,x2';
+$('src').value=EX1;
+$('src').oninput=()=>$('cnt').textContent=$('src').value.split('\n').filter(l=>l.replace(/#.*/,'').trim()).length+'/20 instrucciones';
+$('login').onclick=()=>{$('admin').hidden=false;$('auth').hidden=true;$('logout').hidden=false;$('src').oninput()};
+$('logout').onclick=()=>{$('admin').hidden=true;$('auth').hidden=false;$('logout').hidden=true};
+$('load').onclick=load;$('ex1').onclick=()=>{$('src').value=EX1;$('src').oninput();load()};$('ex2').onclick=()=>{$('src').value=EX2;$('src').oninput();load()};
+$('step').onclick=step;$('play').onclick=play;$('rst').onclick=reset;
+$('spd').oninput=()=>{if(timer){stop();play()}};
+$('fw').onchange=e=>{FW=e.target.checked;lg('Forwarding '+(FW?'activado':'desactivado'));render()};
+$('det').onchange=e=>{DET=e.target.checked;lg('Detección de riesgos '+(DET?'activada':'desactivada'));render()};
+['IF','ID','EX'].forEach(k=>$('f'+k).onclick=()=>{fl[k]=true;lg('Flush '+k+' programado para el próximo ciclo');render()});
+$('bBub').onclick=()=>{bub=true;lg('Burbuja programada en el próximo fetch');render()};
+$('bExc').onclick=()=>{force=true;lg('Excepción programada para la instrucción que esté en EX en el próximo ciclo');render()};
+$('bInj').onclick=()=>{const t=parse($('inj').value);if(!t)return;inj.push(t);$('inj').value='';lg('Instrucción inyectada en cola: '+t.text);render()};
+$('src').oninput();load();
+</script></body></html>
